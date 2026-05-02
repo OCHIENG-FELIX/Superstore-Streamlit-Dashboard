@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
-# Page Configuration
-st.set_page_config(
-    page_title="Superstore BI Dashboard",
-    page_icon="🛒",
-    layout="wide"
-)
-
+st.set_page_config(page_title="Superstore BI Dashboard", layout="wide")
 st.title("🛒 Superstore Business Intelligence Dashboard")
-st.markdown("### Sales, Profit & Customer Insights | 2014 - 2017")
+st.markdown("### Comprehensive Sales, Profit & Customer Insights")
 
 # Load data
 @st.cache_data
@@ -24,18 +20,17 @@ df = load_data()
 
 # Sidebar Filters
 st.sidebar.header("🔍 Filters")
-regions = st.sidebar.multiselect("Region", options=df['Region'].unique(), default=df['Region'].unique())
-categories = st.sidebar.multiselect("Category", options=df['Category'].unique(), default=df['Category'].unique())
-segments = st.sidebar.multiselect("Segment", options=df['Segment'].unique(), default=df['Segment'].unique())
+regions = st.sidebar.multiselect("Region", df['Region'].unique(), default=df['Region'].unique())
+categories = st.sidebar.multiselect("Category", df['Category'].unique(), default=df['Category'].unique())
+segments = st.sidebar.multiselect("Segment", df['Segment'].unique(), default=df['Segment'].unique())
 
-# Filter the data
 filtered_df = df[
     (df['Region'].isin(regions)) &
     (df['Category'].isin(categories)) &
     (df['Segment'].isin(segments))
 ]
 
-# ====================== KPIs ======================
+# KPIs
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Total Sales", f"${filtered_df['Sales'].sum():,.0f}")
@@ -45,12 +40,16 @@ with col3:
     margin = (filtered_df['Profit'].sum() / filtered_df['Sales'].sum() * 100) if filtered_df['Sales'].sum() > 0 else 0
     st.metric("Profit Margin", f"{margin:.1f}%")
 with col4:
-    st.metric("Total Orders", len(filtered_df))
+    st.metric("Orders", len(filtered_df))
 
-# ====================== CHARTS ======================
-tab1, tab2, tab3 = st.tabs(["📈 Trends", "📊 Performance", "🔝 Top Performers"])
+# Tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📈 Trends", "📍 Performance", "👥 RFM", "🏆 Top Performers"])
 
 with tab1:
+    st.subheader("Key Insights")
+    st.write("Use the filters on the left to explore different segments.")
+
+with tab2:
     st.subheader("Sales & Profit Trend")
     monthly = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M')).agg({
         'Sales': 'sum',
@@ -58,28 +57,40 @@ with tab1:
     }).reset_index()
     monthly['Order Date'] = monthly['Order Date'].astype(str)
     
-    fig = px.line(monthly, x='Order Date', y=['Sales', 'Profit'], 
-                  title="Monthly Sales vs Profit Trend", markers=True)
+    fig = px.line(monthly, x='Order Date', y=['Sales', 'Profit'], title="Monthly Trend")
     st.plotly_chart(fig, use_container_width=True)
 
-with tab2:
+with tab3:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Sales by Region")
-        fig_region = px.bar(filtered_df.groupby('Region')['Sales'].sum().reset_index(), 
-                            x='Region', y='Sales', color='Region')
-        st.plotly_chart(fig_region, use_container_width=True)
-    
+        fig_r = px.bar(filtered_df.groupby('Region')['Sales'].sum().reset_index(), x='Region', y='Sales')
+        st.plotly_chart(fig_r, use_container_width=True)
     with col2:
         st.subheader("Profit by Category")
-        fig_cat = px.bar(filtered_df.groupby('Category')['Profit'].sum().reset_index(), 
-                         x='Category', y='Profit', color='Category')
-        st.plotly_chart(fig_cat, use_container_width=True)
+        fig_c = px.bar(filtered_df.groupby('Category')['Profit'].sum().reset_index(), x='Category', y='Profit')
+        st.plotly_chart(fig_c, use_container_width=True)
 
-with tab3:
+with tab4:
+    st.subheader("Customer Segmentation (RFM - Simple)")
+    # Simple RFM based on Monetary
+    rfm = filtered_df.groupby('Customer ID')['Sales'].sum().reset_index()
+    rfm['Segment'] = pd.qcut(rfm['Sales'], 4, labels=['Low', 'Medium', 'High', 'VIP'])
+    st.bar_chart(rfm['Segment'].value_counts())
+
+with tab5:
     st.subheader("Top 10 Most Profitable Products")
-    top_products = filtered_df.groupby('Product Name')['Profit'].sum().sort_values(ascending=False).head(10)
-    fig_top = px.bar(top_products.reset_index(), x='Product Name', y='Profit', orientation='h')
+    top = filtered_df.groupby('Product Name')['Profit'].sum().sort_values(ascending=False).head(10)
+    fig_top = px.bar(top.reset_index(), x='Product Name', y='Profit', orientation='h')
     st.plotly_chart(fig_top, use_container_width=True)
+
+# Download Button
+csv = filtered_df.to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="📥 Download Filtered Data as CSV",
+    data=csv,
+    file_name='superstore_filtered_data.csv',
+    mime='text/csv'
+)
 
 st.caption("Superstore BI Dashboard | Built with Streamlit & Plotly | By Ochieng Felix")
