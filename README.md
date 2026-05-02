@@ -1,6 +1,11 @@
 Superstore Business Intelligence Dashboard
 Interactive Web Application
-Developed a comprehensive interactive dashboard for analyzing retail performance. Features include real-time filtering, sales & profit trend visualization, RFM customer segmentation, and top performer identification.
+
+Developed a comprehensive interactive dashboard for analyzing retail performance.
+Features include:
+real-time filtering
+sales & profit trend visualization
+RFM customer segmentation, and top performer identification.
 
 Built with Streamlit and Plotly for a responsive, professional user experience
 Implemented RFM analysis to segment customers and identify high-value and at-risk groups
