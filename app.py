@@ -1,14 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
 
 st.set_page_config(page_title="Superstore BI Dashboard", layout="wide")
 st.title("🛒 Superstore Business Intelligence Dashboard")
-st.markdown("### Comprehensive Sales, Profit & Customer Insights")
+st.markdown("### Sales, Profit & Customer Insights | 2014 - 2017")
 
-# Load data
 @st.cache_data
 def load_data():
     df = pd.read_csv("Sample - Superstore.csv", encoding='latin1')
@@ -22,13 +19,8 @@ df = load_data()
 st.sidebar.header("🔍 Filters")
 regions = st.sidebar.multiselect("Region", df['Region'].unique(), default=df['Region'].unique())
 categories = st.sidebar.multiselect("Category", df['Category'].unique(), default=df['Category'].unique())
-segments = st.sidebar.multiselect("Segment", df['Segment'].unique(), default=df['Segment'].unique())
 
-filtered_df = df[
-    (df['Region'].isin(regions)) &
-    (df['Category'].isin(categories)) &
-    (df['Segment'].isin(segments))
-]
+filtered_df = df[(df['Region'].isin(regions)) & (df['Category'].isin(categories))]
 
 # KPIs
 col1, col2, col3, col4 = st.columns(4)
@@ -42,55 +34,67 @@ with col3:
 with col4:
     st.metric("Orders", len(filtered_df))
 
-# Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📈 Trends", "📍 Performance", "👥 RFM", "🏆 Top Performers"])
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Trends", "📊 Performance", "👥 RFM Segmentation", "🏆 Top Performers"])
 
 with tab1:
-    st.subheader("Key Insights")
-    st.write("Use the filters on the left to explore different segments.")
-
-with tab2:
     st.subheader("Sales & Profit Trend")
     monthly = filtered_df.groupby(filtered_df['Order Date'].dt.to_period('M')).agg({
         'Sales': 'sum',
         'Profit': 'sum'
     }).reset_index()
     monthly['Order Date'] = monthly['Order Date'].astype(str)
-    
-    fig = px.line(monthly, x='Order Date', y=['Sales', 'Profit'], title="Monthly Trend")
+    fig = px.line(monthly, x='Order Date', y=['Sales', 'Profit'], title="Monthly Trend", markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
-with tab3:
+with tab2:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Sales by Region")
-        fig_r = px.bar(filtered_df.groupby('Region')['Sales'].sum().reset_index(), x='Region', y='Sales')
-        st.plotly_chart(fig_r, use_container_width=True)
+        st.plotly_chart(px.bar(filtered_df.groupby('Region')['Sales'].sum().reset_index(), x='Region', y='Sales'), use_container_width=True)
     with col2:
         st.subheader("Profit by Category")
-        fig_c = px.bar(filtered_df.groupby('Category')['Profit'].sum().reset_index(), x='Category', y='Profit')
-        st.plotly_chart(fig_c, use_container_width=True)
+        st.plotly_chart(px.bar(filtered_df.groupby('Category')['Profit'].sum().reset_index(), x='Category', y='Profit'), use_container_width=True)
+
+with tab3:
+    st.subheader("RFM Customer Segmentation")
+    latest_date = filtered_df['Order Date'].max()
+    rfm = filtered_df.groupby('Customer ID').agg({
+        'Order Date': lambda x: (latest_date - x.max()).days,
+        'Order ID': 'nunique',
+        'Sales': 'sum'
+    }).reset_index()
+    rfm.columns = ['CustomerID', 'Recency', 'Frequency', 'Monetary']
+    
+    rfm['R_Score'] = pd.qcut(rfm['Recency'], 5, labels=[5,4,3,2,1], duplicates='drop')
+    rfm['F_Score'] = pd.qcut(rfm['Frequency'], 5, labels=[1,2,3,4,5], duplicates='drop')
+    rfm['M_Score'] = pd.qcut(rfm['Monetary'], 5, labels=[1,2,3,4,5], duplicates='drop')
+    rfm['RFM_Score'] = rfm['R_Score'].astype(str) + rfm['F_Score'].astype(str) + rfm['M_Score'].astype(str)
+    
+    def segment(rfm_score):
+        if rfm_score in ['555','554','545','544']:
+            return 'Best Customers'
+        elif rfm_score[0] == '5':
+            return 'Loyal Customers'
+        elif rfm_score[0] == '4':
+            return 'Potential Loyalists'
+        elif rfm_score[0] == '3':
+            return 'At Risk'
+        elif rfm_score[0] == '2':
+            return 'Hibernating'
+        else:
+            return 'Lost Customers'
+    
+    rfm['Segment'] = rfm['RFM_Score'].apply(segment)
+    st.bar_chart(rfm['Segment'].value_counts())
+    st.dataframe(rfm.head(10))
 
 with tab4:
-    st.subheader("Customer Segmentation (RFM - Simple)")
-    # Simple RFM based on Monetary
-    rfm = filtered_df.groupby('Customer ID')['Sales'].sum().reset_index()
-    rfm['Segment'] = pd.qcut(rfm['Sales'], 4, labels=['Low', 'Medium', 'High', 'VIP'])
-    st.bar_chart(rfm['Segment'].value_counts())
-
-with tab5:
     st.subheader("Top 10 Most Profitable Products")
     top = filtered_df.groupby('Product Name')['Profit'].sum().sort_values(ascending=False).head(10)
-    fig_top = px.bar(top.reset_index(), x='Product Name', y='Profit', orientation='h')
-    st.plotly_chart(fig_top, use_container_width=True)
+    st.plotly_chart(px.bar(top.reset_index(), x='Product Name', y='Profit', orientation='h'), use_container_width=True)
 
-# Download Button
+# Download
 csv = filtered_df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="📥 Download Filtered Data as CSV",
-    data=csv,
-    file_name='superstore_filtered_data.csv',
-    mime='text/csv'
-)
+st.download_button("📥 Download Filtered Data", csv, "superstore_filtered.csv", "text/csv")
 
 st.caption("Superstore BI Dashboard | Built with Streamlit & Plotly | By Ochieng Felix")
